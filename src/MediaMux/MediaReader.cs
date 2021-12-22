@@ -9,6 +9,8 @@ namespace EmguFFmpeg
 {
     public unsafe partial class MediaReader : MediaMux
     {
+        private const int INVALID_DATA_ERROR = -1094995529;
+
         /// <summary>
         /// Get <see cref="AVInputFormat"/>
         /// </summary>
@@ -42,7 +44,17 @@ namespace EmguFFmpeg
                 avio_Alloc_Context_Read_Packet, null, avio_Alloc_Context_Seek);
             fixed (AVFormatContext** ppFormatContext = &pFormatContext)
             {
-                ffmpeg.avformat_open_input(ppFormatContext, null, iformat, options).ThrowIfError();
+                var pStoredContext = pFormatContext;
+                int openResult = ffmpeg.avformat_open_input(ppFormatContext, null, iformat, options);
+
+                if (openResult == INVALID_DATA_ERROR)
+                {
+                    // Preventing ffmpeg memory leak in avutil-56
+                    ffmpeg.avio_close(pStoredContext->pb);
+                }
+
+                pStoredContext = null;
+                openResult.ThrowIfError();
             }
             ffmpeg.avformat_find_stream_info(pFormatContext, null).ThrowIfError();
             base.Format = iformat ?? new InFormat(pFormatContext->iformat);
